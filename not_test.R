@@ -1,6 +1,7 @@
 
 #```{r Load libraries}
 
+
 ## LIBRARIES
 rm()
 
@@ -50,6 +51,12 @@ require('rpart')
 require('rpart.plot')
 require('partykit')
 require('randomForest')
+
+write(toBibtex(citation()),file="CRAN")
+for(i in 1:length(packages)){
+  write(toBibtex(citation(packages[i])),file=sprintf("%s%s.bib",packages[i],"_CRAN"))
+}
+
 
 ###
 data <- read.csv('../Analysis/Data/170725/data170725.csv') %>%
@@ -132,7 +139,9 @@ table(result_predict_RF,data_predicting$CRRP)
 
 
 
-## Tree (rpart) ##
+##== Tree (rpart) ==##
+
+# use RF result (important variables)
 
 treemodel_data <- rpart(
   CRRP ~ CRP+erosion+DAS28ESR_auc+ESR+duration+TSS+est1yrTSS+JSN+age+HAQ,
@@ -141,6 +150,14 @@ treemodel_data <- rpart(
                 maxcompete = 4, maxsurrogate = 5, usesurrogate = 2, xval = 10,
                 surrogatestyle = 0, maxdepth = 30)
   )
+
+check_predict_rpart   <-predict(treemodel_data, data_training)
+check_tree_prediction <-data.frame(check_predict_rpart,data_training$CRRP) %>%
+  mutate(pred = ifelse(X1 > 0.4 ,1 ,0))
+hist(check_tree_prediction$X0)
+hist(check_tree_prediction$X1)
+check_tree_prediction
+
 
 summary(treemodel_data)
 result_predict_rpart  <-predict(treemodel_data, data_predicting)
@@ -155,6 +172,38 @@ plot(as.party(treemodel_data))
 
 hist(tree_prediction$X0)
 hist(tree_prediction$X1)
+
+table(tree_prediction$data_predicting.CRRP, tree_prediction$pred)
+
+# without usage of RF result (all variables)
+
+treemodel_full_data <- rpart(
+  CRRP ~ .,
+  data = data_training,
+  control = rpart.control(minsplit = 10, minbucket = round(10/3), cp = 0.00001, 
+                          maxcompete = 4, maxsurrogate = 5, usesurrogate = 2, xval = 10,
+                          surrogatestyle = 0, maxdepth = 30)
+)
+
+check_predict_full_rpart   <-predict(treemodel_full_data, data_training)
+check_tree_full_prediction <-data.frame(check_predict_full_rpart,data_training$CRRP) %>%
+  mutate(pred = ifelse(X1 > 0.4 ,1 ,0))
+hist(check_tree_full_prediction$X0)
+hist(check_tree_full_prediction$X1)
+check_tree_full_prediction
+
+summary(treemodel_full_data)
+result_predict_full_rpart  <-predict(treemodel_full_data, data_predicting)
+tree_full_prediction <-data.frame(result_predict_full_rpart,data_predicting$CRRP) %>%
+  mutate(pred = ifelse(X1 > 0.4 ,1 ,0))
+tree_full_prediction
+
+rpart.plot(treemodel_full_data)
+plotcp(treemodel_full_data)
+plot(as.party(treemodel_full_data))
+
+hist(tree_full_prediction$X0)
+hist(tree_full_prediction$X1)
 
 table(tree_prediction$data_predicting.CRRP, tree_prediction$pred)
 
