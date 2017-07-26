@@ -1,4 +1,8 @@
 
+
+dir.sub  <- "./Prog/sub"
+ROC.func <- "functions20170410.R"
+
 #```{r Load libraries}
 
 
@@ -57,6 +61,10 @@ for(i in 1:length(packages)){
   write(toBibtex(citation(packages[i])),file=sprintf("%s%s.bib",packages[i],"_CRAN"))
 }
 
+##== subroutines ==##
+
+# ROC #
+source(sprintf("%s/%s",dir.sub, ROC.func))
 
 ###
 data <- read.csv('../Analysis/Data/170725/data170725.csv') %>%
@@ -273,6 +281,26 @@ table(result_predict_anovadot,data_predicting$CRRP)
 table(result_predict_splinedot,data_predicting$CRRP)
 
 ##
+
+##== ROC ==##
+
+# ROC Curve
+#```{r ROC curve}
+
+#pdf(file=sprintf(
+#  "%s/%s.pdf",
+#  wd,
+#  paste(ROC.File.output,"")
+#)#,
+#width=30,
+#height = 70
+#)
+#ROC(
+#  ads$X, 
+#  ads$Y,
+#  col.area=gray(0.9), type="o", pch=16
+#)
+#dev.off()
 
 
 
