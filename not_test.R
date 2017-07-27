@@ -137,7 +137,7 @@ treemodel_rf <- tuneRF(
   trace=TRUE, 
   plot=TRUE,
   doBest=TRUE,
-  classwt=c(0.05,0.95)
+  classwt=c(1-0.999999,0.999999)
 )
 pdf('randomForest_output.pdf')
 print(treemodel_rf)
