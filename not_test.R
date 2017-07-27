@@ -27,7 +27,8 @@ packages <- c(
   'rpart.plot',
   'Formula',
   'partykit',
-  'randomForest'
+  'randomForest',
+  'tree'
   #  'scaleboot' 
   #  'biomaRt'
 ) 
@@ -55,6 +56,7 @@ require('rpart')
 require('rpart.plot')
 require('partykit')
 require('randomForest')
+require('tree')
 
 write(toBibtex(citation()),file="CRAN")
 for(i in 1:length(packages)){
@@ -86,7 +88,9 @@ data <- read.csv('../Analysis/Data/170725/data170725.csv') %>%
     -csDMARD_increase,
     -csDMARD_strength,
     -TSS.1,
-    -DAS28ESR_auc.1
+    -DAS28ESR_auc.1#,
+#    -ESR,
+#   -CRP
     )
 
 summary(data)
@@ -126,25 +130,27 @@ pred_imp <- rfImpute(CRRP ~ . ,
 treemodel_rf <- tuneRF(
   x=ads_imp %>% dplyr::select(-CRRP),
   y=ads_imp$CRRP,
-  mtryStart=2,
+  mtryStart=5,
   ntreeTry=5000,
   stepFactor=0.00005,
   improve=0.00005,
   trace=TRUE, 
   plot=TRUE,
-  doBest=TRUE
+  doBest=TRUE,
+  classwt=c(0.05,0.95)
 )
-
+pdf('randomForest_output.pdf')
 print(treemodel_rf)
 plot(treemodel_rf)
 varImpPlot(treemodel_rf)
+varImp_list <- as.data.frame(importance(treemodel_rf))
 
 result_predict_RF  <-predict(
   treemodel_rf, 
   pred_imp
   )
 table(result_predict_RF,data_predicting$CRRP)
-
+dev.off()
 
 
 ##== Tree (rpart) ==##
@@ -173,6 +179,7 @@ tree_prediction <-data.frame(result_predict_rpart,data_predicting$CRRP) %>%
   mutate(pred = ifelse(X1 > 0.4 ,1 ,0))
 tree_prediction
 
+pdf('rpart_with_varImp.pdf')
 
 rpart.plot(treemodel_data)
 plotcp(treemodel_data)
@@ -182,6 +189,8 @@ hist(tree_prediction$X0)
 hist(tree_prediction$X1)
 
 table(tree_prediction$data_predicting.CRRP, tree_prediction$pred)
+
+dev.off()
 
 # without usage of RF result (all variables)
 
