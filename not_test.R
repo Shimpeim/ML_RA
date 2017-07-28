@@ -122,7 +122,7 @@ summary(data_predicting)
 ##
 
 seq_weightRF <- seq(1,10,by=0.5) 
-weightRF     <- 1*10**(1*seq_weightRF) 
+weightRF     <- 1*10**(-seq_weightRF) 
 
 ads_imp <- rfImpute(CRRP ~ . ,
                     data_training,
@@ -138,14 +138,14 @@ RF_weightGreed <- function(weightRF){
   treemodel_rf <- tuneRF(
     x=ads_imp %>% dplyr::select(-CRRP),
     y=ads_imp$CRRP,
-    mtryStart=4000,
-    ntreeTry=100000,
+    mtryStart=4,
+    ntreeTry=500,
     stepFactor=1.5,
     improve=0.5,
     trace=TRUE, 
     plot=TRUE,
     doBest=TRUE,
-    classwt=c(1,weightRF)
+    classwt=c(weightRF,1-weightRF)
   )
   pdf(sprintf('%s_%s',prefix,'randomForest_output.pdf'))
   print(treemodel_rf)
@@ -161,12 +161,17 @@ RF_weightGreed <- function(weightRF){
     treemodel_rf, 
     ads_imp
   )
-  table(result_predict_RF_ads,data_training$CRRP)
-  table(result_predict_RF,data_predicting$CRRP)
+  return(
+    list(
+      weightRF,
+      table(result_predict_RF_ads,data_training$CRRP),
+      table(result_predict_RF,data_predicting$CRRP)
+    )
+  )
   dev.off()
 }
 
-laply(weightRF,RF_weightGreed)
+RF_results <- llply(weightRF,RF_weightGreed)
 
 
 
