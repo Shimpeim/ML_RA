@@ -121,6 +121,9 @@ summary(data_predicting)
 ## RF ##
 ##
 
+seq_weightRF <- seq(1,10,by=0.5) 
+weightRF     <- 1*10**(1*seq_weightRF) 
+
 ads_imp <- rfImpute(CRRP ~ . ,
                     data_training,
                     iter=10,
@@ -130,37 +133,41 @@ pred_imp <- rfImpute(CRRP ~ . ,
                      iter=10,
                      ntree=90000)
 
-treemodel_rf <- tuneRF(
-  x=ads_imp %>% dplyr::select(-CRRP),
-  y=ads_imp$CRRP,
-  mtryStart=4,
-  ntreeTry=100,
-  stepFactor=1.5,
-  improve=0.5,
-  trace=TRUE, 
-  plot=TRUE,
-  doBest=TRUE,
-  classwt=c(1-0.999999999,0.999999999)
-)
-
-
-pdf('randomForest_output.pdf')
-print(treemodel_rf)
-plot(treemodel_rf)
-varImpPlot(treemodel_rf)
-varImp_list <- as.data.frame(importance(treemodel_rf))
-
-result_predict_RF  <-predict(
-  treemodel_rf, 
-  pred_imp
+RF_weightGreed <- function(weightRF){
+  prefix <- weightRF
+  treemodel_rf <- tuneRF(
+    x=ads_imp %>% dplyr::select(-CRRP),
+    y=ads_imp$CRRP,
+    mtryStart=4000,
+    ntreeTry=100000,
+    stepFactor=1.5,
+    improve=0.5,
+    trace=TRUE, 
+    plot=TRUE,
+    doBest=TRUE,
+    classwt=c(1,weightRF)
   )
-result_predict_RF_ads  <-predict(
-  treemodel_rf, 
-  ads_imp
-)
-table(result_predict_RF_ads,data_training$CRRP)
-table(result_predict_RF,data_predicting$CRRP)
-dev.off()
+  pdf(sprintf('%s_%s',prefix,'randomForest_output.pdf'))
+  print(treemodel_rf)
+  plot(treemodel_rf)
+  varImpPlot(treemodel_rf)
+  varImp_list <- as.data.frame(importance(treemodel_rf))
+  
+  result_predict_RF  <-predict(
+    treemodel_rf, 
+    pred_imp
+  )
+  result_predict_RF_ads  <-predict(
+    treemodel_rf, 
+    ads_imp
+  )
+  table(result_predict_RF_ads,data_training$CRRP)
+  table(result_predict_RF,data_predicting$CRRP)
+  dev.off()
+}
+
+laply(weightRF,RF_weightGreed)
+
 
 
 ##== Tree (rpart) ==##
