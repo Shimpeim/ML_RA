@@ -23,6 +23,7 @@ packages <- c(
   'pander',
   'matrixcalc' ,
   'kernlab' ,
+  'e1071' ,
   'rpart',
   'rpart.plot',
   'Formula',
@@ -52,6 +53,7 @@ require('reshape2')
 require('pander')
 require('matrixcalc')
 require('kernlab')
+require('e1071')
 require('rpart')
 require('rpart.plot')
 require('partykit')
@@ -77,9 +79,10 @@ data <- read.csv('../Analysis/Data/170725/data170725.csv') %>%
     sex       = as.factor(sex),
     age       = as.numeric(age),
     MTX_use   = as.factor(MTX_use),
-    dose_MTX_base = as.numeric(dose_MTX_base),
-    MTX_1yr       = as.numeric(MTX_1yr) ,
-    autoantibody  = as.factor(autoantibody)
+    dose_MTX_base = as.numeric(ifelse(!is.na(dose_MTX_base),dose_MTX_base,0)),
+    MTX_1yr       = as.numeric(ifelse(!is.na(MTX_1yr),MTX_1yr,0)),
+    autoantibody  = as.factor(ifelse(!is.na(autoantibody),autoantibody,3)),
+    duration      = as.factor(ifelse(duration>=3,1,0))
     ) %>%
   dplyr::select(
     -id,
@@ -92,7 +95,7 @@ data <- read.csv('../Analysis/Data/170725/data170725.csv') %>%
 #    -ESR,
 #   -CRP
     )
-
+is.na(data)
 summary(data)
 
 data_tidy <-  data %>%
@@ -127,11 +130,11 @@ weightRF     <- 1*10**(-seq_weightRF)
 ads_imp <- rfImpute(CRRP ~ . ,
                     data_training,
                     iter=10,
-                    ntree=90000)
+                    ntree=500)
 pred_imp <- rfImpute(CRRP ~ . ,
                      data_predicting,
                      iter=10,
-                     ntree=90000)
+                     ntree=500)
 
 RF_weightGreed <- function(weightRF){
   prefix <- weightRF
@@ -153,6 +156,8 @@ RF_weightGreed <- function(weightRF){
   varImpPlot(treemodel_rf)
   varImp_list <- as.data.frame(importance(treemodel_rf))
   
+  dev.off()
+  
   result_predict_RF  <-predict(
     treemodel_rf, 
     pred_imp
@@ -168,12 +173,12 @@ RF_weightGreed <- function(weightRF){
       table(result_predict_RF,data_predicting$CRRP)
     )
   )
-  dev.off()
+
 }
 
 RF_results <- llply(weightRF,RF_weightGreed)
 
-
+dev.off()
 
 ##== Tree (rpart) ==##
 
@@ -262,22 +267,74 @@ table(result_predict_C50,data_predicting$CRRP)
 plot(treemodel_data)
 ##
 
-## SVM ##
-##http://yut.hatenablog.com/entry/20120827/1346024147#
 
-# kernel functions (help("ksvm"))
+##== SVM ==
 
-# rbfdot Radial Basis kernel "Gaussian"
-# polydot Polynomial kernel
-# vanilladot Linear kernel
-# tanhdot Hyperbolic tangent kernel
-# laplacedot Laplacian kernel
-# besseldot Bessel kernel
-# anovadot ANOVA RBF kernel
-# splinedot Spline kernel
-# stringdot String kernel
+## tune.svm()
+## http://d.hatena.ne.jp/hoxo_m/20110325/p1
 
-data_svm_RBF  <-ksvm(CRRP ~., data=data_training, kernel="rbfdot" )
+# the first search 
+
+gammaRange = 10^(-5:5)
+costRange = 10^(-5:5)
+
+train.RBF <- tune.svm(CRRP ~., data=data_training, class.weights = 100/table(data_training$CRRP),
+                      gamma=gammaRange, cost=costRange,
+              tunecontrol = tune.control(sampling="cross", cross=8))
+
+cat("- best parameters:\n")
+cat(
+  "gamma =", 
+  train.RBF$best.parameters$gamma, 
+  "; cost =",
+  train.RBF$best.parameters$cost,
+  ";\n")
+cat(
+  "accuracy:", 
+  100 - train.RBF$best.performance * 100, 
+  "%\n\n"
+  )
+plot(
+  train.RBF, transform.x=log10, transform.y=log10)
+
+# the second search
+
+gamma <- 10^(-1.5)
+cost  <- 10^(1.5)
+gammaRange <- 10^seq(log10(gamma)-1,log10(gamma)+1,length=11)[2:10]
+costRange  <- 10^seq(log10(cost)-1 ,log10(cost)+1 ,length=11)[2:10]
+
+train.RBF <- tune.svm(CRRP ~., data=data_training, gamma=gammaRange, cost=costRange,
+                      tunecontrol = tune.control(sampling="cross", cross=10))
+
+cat("- best parameters:\n")
+cat(
+  "gamma =", 
+  train.RBF$best.parameters$gamma, 
+  "; cost =",
+  train.RBF$best.parameters$cost,
+  ";\n")
+cat(
+  "accuracy:", 
+  100 - train.RBF$best.performance * 100, 
+  "%\n\n"
+)
+plot(
+  train.RBF, transform.x=log10, transform.y=log10)
+
+## prediction
+
+gamma = 0.05011872 ; cost = 5.011872 ;
+
+SVM.model_RBF <- svm(CRRP ~ ., data = data_training, gamma=gamma, cost=cost)
+
+result_predict[
+  complete.cases(result_predict), "RBF"] <- predict(SVM.model_RBF, data_predicting)
+table(result_predict$RBF, result_predict$CRRP)
+
+
+
+
 data_svm_poly <-ksvm(CRRP ~., data=data_training, kernel="polydot" )
 data_svm_lin  <-ksvm(CRRP ~., data=data_training, kernel="vanilladot" )
 data_svm_tanh <-ksvm(CRRP ~., data=data_training, kernel="tanhdot" )
@@ -286,32 +343,8 @@ data_svm_besseldot <-ksvm(CRRP ~., data=data_training, kernel="besseldot" )
 data_svm_anovadot  <-ksvm(CRRP ~., data=data_training, kernel="anovadot" )
 data_svm_splinedot <-ksvm(CRRP ~., data=data_training, kernel="splinedot" )
 
-data_svm_RBF
-data_svm_poly
-data_svm_lin
-data_svm_tanh
-data_svm_LaP
-data_svm_besseldot
-data_svm_anovadot
-data_svm_splinedot
 
-result_predict_RBF  <-predict(data_svm_RBF, data_predicting)
-result_predict_poly <-predict(data_svm_poly, data_predicting)
-result_predict_lin  <-predict(data_svm_lin, data_predicting)
-result_predict_tanh <-predict(data_svm_tanh, data_predicting)
-result_predict_LaP  <-predict(data_svm_LaP, data_predicting)
-result_predict_anovadot  <-predict(data_svm_anovadot, data_predicting)
-result_predict_splinedot <-predict(data_svm_splinedot, data_predicting)
 
-table(result_predict_RBF,data_predicting$CRRP)
-table(result_predict_poly,data_predicting$CRRP)
-table(result_predict_lin,data_predicting$CRRP)
-table(result_predict_tanh,data_predicting$CRRP)
-table(result_predict_LaP,data_predicting$CRRP)
-table(result_predict_anovadot,data_predicting$CRRP)
-table(result_predict_splinedot,data_predicting$CRRP)
-
-##
 
 ##== ROC ==##
 
