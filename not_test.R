@@ -148,10 +148,6 @@ row_in_train <- createDataPartition(
   )
 data_train <- data[row_in_train,  ]
 data_pred  <- data[-row_in_train, ]
-# rowdata<-nrow(data)
-# random_ids<-sample(rowdata,rowdata*0.5)
-# data_training<-data[random_ids, ]
-# data_predicting<-data[-random_ids, ]
 
 summary(data_train)
 summary(data_pred)
@@ -176,13 +172,12 @@ pred_imp <- rfImpute(CRRP ~ . ,
 WRF_results <- llply(weightRF,imbRF_greed,method='WRF')
 BRF_results <- imbRF_greed(method='BRF')
 
-weight_TPV <- data.frame()
+weight_sens <- data.frame()
 for(i in 1:length(seq_weightRF)){
-  weight_TPV[i,1] <- WRF_results[[i]]$TPV
-  weight_TPV[i,2] <- WRF_results[[i]]$weight
+  weight_sens[i,1] <- WRF_results[[i]]$sens
+  weight_sens[i,2] <- WRF_results[[i]]$weight
 }
-WRF_results[[i]]
-
+max_PPV <- 
 #library(ROCR)
 
 RF_to_ROC <- function(list_of_rfResults){
