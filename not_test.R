@@ -29,7 +29,10 @@ packages <- c(
   'Formula',
   'partykit',
   'randomForest',
-  'tree'
+  'inTrees',
+  'tree',
+  'caret',
+  'DMwR'
   #  'scaleboot' 
   #  'biomaRt'
 ) 
@@ -58,11 +61,14 @@ require('rpart')
 require('rpart.plot')
 require('partykit')
 require('randomForest')
+require('inTrees')
 require('tree')
+require('caret')
+require('DMwR')
 
 write(toBibtex(citation()),file="CRAN")
 for(i in 1:length(packages)){
-  write(toBibtex(citation(packages[i])),file=sprintf("%s%s.bib",packages[i],"_CRAN"))
+  write(toBibtex(citation(packages[i])),file=sprintf("../Biblio/%s%s.bib",packages[i],"_CRAN"))
 }
 
 ##== subroutines ==##
@@ -70,7 +76,8 @@ for(i in 1:length(packages)){
 # ROC #
 source(sprintf("%s/%s",dir.sub, ROC.func))
 
-###
+##== ANALYSIS DATA SET IMPORT ==##
+
 data <- read.csv('../Analysis/Data/170725/data170725.csv') %>%
   mutate(
     CRRP      = as.factor(CRRP),
@@ -110,75 +117,91 @@ data_summ <- data_tidy %>%
 
 data_summ
 
-## data split (train./ pred.)##
+##== Scaling ==##
 
-rowdata<-nrow(data)
+data_scaled <- data %>%
+  mutate(
+    age = scale(age),
+    DAS28ESR_auc = scale(DAS28ESR_auc),
+    TSS = scale(TSS),
+    HAQ = scale(HAQ),
+    dose_MTX_base = scale(dose_MTX_base),
+    MTX_1yr = scale(MTX_1yr),
+    CRP = scale(CRP),
+    ESR = scale(ESR),
+    erosion = scale(erosion),
+    JSN = scale(JSN),
+    est1yrTSS = scale(est1yrTSS)
+    )
 
-random_ids<-sample(rowdata,rowdata*0.5)
-data_training<-data[random_ids, ]
-data_predicting<-data[-random_ids, ]
+summary(data_scaled)
 
-summary(data_training)
-summary(data_predicting)
+##== data split (train./ pred.) ==##
 
-## RF ##
-##
+## caret package ##
+# https://www.slideshare.net/sfchaos/ss-33703018
 
-seq_weightRF <- seq(1,10,by=0.5) 
-weightRF     <- 1*10**(-seq_weightRF) 
+row_in_train <- createDataPartition(
+  data$CRRP,
+  p=.8,
+  list=FALSE
+  )
+data_train <- data[row_in_train,  ]
+data_pred  <- data[-row_in_train, ]
+# rowdata<-nrow(data)
+# random_ids<-sample(rowdata,rowdata*0.5)
+# data_training<-data[random_ids, ]
+# data_predicting<-data[-random_ids, ]
+
+summary(data_train)
+summary(data_pred)
+
+##== RF ==##
+
+
+source('./Prog/sub/randomforest_20170801.R')
+
+ seq_weightRF <- seq(1,10,by=0.5) 
+ weightRF     <- 1*10**(-seq_weightRF) 
 
 ads_imp <- rfImpute(CRRP ~ . ,
-                    data_training,
+                    data_train,
                     iter=10,
                     ntree=500)
 pred_imp <- rfImpute(CRRP ~ . ,
-                     data_predicting,
+                     data_pred,
                      iter=10,
                      ntree=500)
 
-RF_weightGreed <- function(weightRF){
-  prefix <- weightRF
-  treemodel_rf <- tuneRF(
-    x=ads_imp %>% dplyr::select(-CRRP),
-    y=ads_imp$CRRP,
-    mtryStart=4,
-    ntreeTry=500,
-    stepFactor=1.5,
-    improve=0.5,
-    trace=TRUE, 
-    plot=TRUE,
-    doBest=TRUE,
-    classwt=c(weightRF,1-weightRF)
-  )
-  pdf(sprintf('%s_%s',prefix,'randomForest_output.pdf'))
-  print(treemodel_rf)
-  plot(treemodel_rf)
-  varImpPlot(treemodel_rf)
-  varImp_list <- as.data.frame(importance(treemodel_rf))
-  
-  dev.off()
-  
-  result_predict_RF  <-predict(
-    treemodel_rf, 
-    pred_imp
-  )
-  result_predict_RF_ads  <-predict(
-    treemodel_rf, 
-    ads_imp
-  )
-  return(
-    list(
-      weightRF,
-      table(result_predict_RF_ads,data_training$CRRP),
-      table(result_predict_RF,data_predicting$CRRP)
-    )
-  )
+WRF_results <- llply(weightRF,imbRF_greed,method='WRF')
+BRF_results <- imbRF_greed(method='BRF')
 
+weight_TPV <- data.frame()
+for(i in 1:length(seq_weightRF)){
+  weight_TPV[i,1] <- WRF_results[[i]]$TPV
+  weight_TPV[i,2] <- WRF_results[[i]]$weight
+}
+WRF_results[[i]]
+
+#library(ROCR)
+
+RF_to_ROC <- function(list_of_rfResults){
+  predictions=as.vector(list_of_rfResults$votes[,2])
+  pred=prediction(list_of_rfResults,data_pred)
+  
+  perf_AUC=performance(pred,"auc") #Calculate the AUC value
+  AUC=perf_AUC@y.values[[1]]
+  
+  perf_ROC=performance(pred,"tpr","fpr") #plot the actual ROC curve
+  plot(perf_ROC, main="ROC plot")
+  text(0.5,0.5,paste("AUC = ",format(AUC, digits=5, scientific=FALSE)))
 }
 
-RF_results <- llply(weightRF,RF_weightGreed)
+a <- llply(WRF_results,RF_to_ROC)
 
 dev.off()
+
+
 
 ##== Tree (rpart) ==##
 
@@ -251,24 +274,25 @@ hist(tree_full_prediction$X1)
 
 table(tree_prediction$data_predicting.CRRP, tree_prediction$pred)
 
-##
-## Tree (C5.0) ##
-
-## NOT WORK ##
-
-treemodel_data <- C5.0(
-  x = data_training %>%
-    dplyr::select(CRP,erosion,DAS28ESR_auc),
-  y = data_training$CRRP
-)
-summary(treemodel_data)
-result_predict_C50  <-predict(treemodel_data, data_predicting)
-table(result_predict_C50,data_predicting$CRRP)
-plot(treemodel_data)
-##
-
-
 ##== SVM ==
+
+## caret package ##
+# https://www.slideshare.net/sfchaos/ss-33703018
+
+disc.svm <- train(
+  CRRP ~ ., data=data_train[complete.cases(data_train),],
+  method="svmRadial",
+  tuneGrid=expand.grid(
+    C = 10**seq(-10,-5,1),
+    sigma = 10**seq(5,10,1)
+    ),
+  trControl=trainControl(
+    method='cv',
+    number=10
+    )
+  )
+
+
 
 ## tune.svm()
 ## http://d.hatena.ne.jp/hoxo_m/20110325/p1
