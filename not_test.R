@@ -1,10 +1,14 @@
 
+#======================================
+# image data (.Rdata) of the 2nd Run is
+# saved in  './backup21Aug17.Rdata'
+#======================================
 
 dir.sub  <- "./Prog/sub"
 ROC.func <- "functions20170410.R"
 Bibtex   <- TRUE
 
-note <- '19Aug17'
+note <- '20Aug17_2ndRun'
   
 # Require libraries #
 
@@ -68,9 +72,12 @@ source('./Prog/sub/table_1.R')
 
 ##== RF ==##
 
+train_imp <- train_imp %>% dplyr::select(-duration_raw)
+pred_imp  <- pred_imp  %>% dplyr::select(-duration_raw)
+
 source('./Prog/sub/randomforest_20170801.R')
 
-seq_weightRF <- seq(6.0,6.5,by=0.025) 
+seq_weightRF <- seq(6.0,7.5,by=0.025) 
 weightRF     <- 1*10**(-seq_weightRF) 
 
 WRF_results <- llply(weightRF,imbRF_greed,method='WRF')
@@ -96,4 +103,17 @@ write.csv(
     'weight_sens.csv')
   )
 
+save(
+  WRF_results,
+  file=sprintf(
+    fmt = './%s/%s/%s_%s',
+    'Output',
+    'weights',
+    note,
+    'rfResults.R')
+  )
 
+## If the best model is yielded 
+## from model with weight #22  
+
+varImpPlot(WRF_results[[22]]$RF_result)
