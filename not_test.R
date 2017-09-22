@@ -1,9 +1,3 @@
-
-#======================================
-# image data (.Rdata) of the 2nd Run is
-# saved in  './backup21Aug17.Rdata'
-#======================================
-
 dir.sub  <- "./Prog/sub"
 ROC.func <- "functions20170410.R"
 Bibtex   <- TRUE
@@ -113,7 +107,24 @@ save(
     'rfResults.R')
   )
 
-## If the best model is yielded 
-## from model with weight #22  
+# = = = = = = = = = 
+# for figure 1 (explanation of RF)
+# = = = = = = = = =
 
-varImpPlot(WRF_results[[22]]$RF_result)
+for(i in 1:6){
+  tree.smpl <- rpart(
+    CRRP ~ cm_bio + sex + duration + age,
+    data = data_cmp[sample(c(1:nrow(data_cmp)),nrow(data_cmp)/3),],
+    control = rpart.control(minsplit = 1)
+  )
+  assign(paste('samp.plot',i,sep='_'),tree.smpl)
+}
+par(mfrow=c(2,3),mar=c(0.1,0.1,0.1))
+plot(samp.plot_1)
+plot(samp.plot_2)
+plot(samp.plot_3)
+plot(samp.plot_4)
+plot(samp.plot_5)
+plot(samp.plot_6)
+
+

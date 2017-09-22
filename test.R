@@ -83,6 +83,28 @@ iris_summ <- iris_tidy %>%
 
 iris_summ
 
+rf.fig1 <- rpart(
+  Species~Sepal.Length + Petal.Length,
+  data = iris,
+  control = rpart.control(minbucket = 1)
+  )
+rf.fig2 <- rpart(
+  Species~Petal.Length,
+  data = iris,
+  control = rpart.control(minbucket = 1)
+)
+rf.fig3 <- rpart(
+  Species~Sepal.Length + Petal.Length,
+  data = iris,
+  control = rpart.control(minbucket = 1)
+)
+rf.fig4 <- rpart(
+  Species~Sepal.Length + Petal.Length,
+  data = iris,
+  control = rpart.control(minbucket = 1)
+)
+plot(rf.fig2)
+
 ## data split (train./ pred.)##
 
 rowdata<-nrow(iris)
